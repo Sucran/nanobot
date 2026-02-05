@@ -45,39 +45,48 @@ class ContextBuilder:
         self.skills = SkillsLoader(workspace)  # 技能加载器
     
     def build_system_prompt(self, skill_names: list[str] | None = None) -> str:
-        """
-        Build the system prompt from bootstrap files, memory, and skills.
-        
+        """构建完整的系统提示词。
+
+        按以下顺序组装上下文：
+        1. 核心身份信息 - 机器人描述、当前时间、工作区路径
+        2. Bootstrap 文件 - AGENTS.md、SOUL.md 等配置文件
+        3. 记忆内容 - 从 memory/MEMORY.md 获取相关记忆
+        4. 技能信息 - 渐进式加载（核心技能完整，其他技能只显示摘要）
+
+        渐进式加载策略：
+        - Always Skills: 完整加载到系统提示词
+        - Available Skills: 只显示摘要，Agent 按需读取
+
         Args:
-            skill_names: Optional list of skills to include.
-        
+            skill_names: 要包含的技能名称列表（可选）
+
         Returns:
-            Complete system prompt.
+            完整的系统提示词字符串，包含所有上下文信息
         """
         parts = []
         
-        # Core identity
+        # 1. 核心身份信息
         parts.append(self._get_identity())
         
-        # Bootstrap files
+        # 2. Bootstrap 配置文件
         bootstrap = self._load_bootstrap_files()
         if bootstrap:
             parts.append(bootstrap)
         
-        # Memory context
+        # 3. 记忆内容
         memory = self.memory.get_memory_context()
         if memory:
             parts.append(f"# Memory\n\n{memory}")
         
-        # Skills - progressive loading
-        # 1. Always-loaded skills: include full content
+        # 4. 技能信息 - 渐进式加载
+        # Always Skills: 完整内容
         always_skills = self.skills.get_always_skills()
         if always_skills:
             always_content = self.skills.load_skills_for_context(always_skills)
             if always_content:
                 parts.append(f"# Active Skills\n\n{always_content}")
         
-        # 2. Available skills: only show summary (agent uses read_file to load)
+        # Available Skills: 只显示摘要
         skills_summary = self.skills.build_skills_summary()
         if skills_summary:
             parts.append(f"""# Skills
@@ -90,7 +99,18 @@ Skills with available="false" need dependencies installed first - you can try in
         return "\n\n---\n\n".join(parts)
     
     def _get_identity(self) -> str:
-        """Get the core identity section."""
+        """构建核心身份信息部分。
+
+        包含：
+        - 机器人名称和描述
+        - 可用工具列表
+        - 当前时间
+        - 工作区路径
+        - 重要提示（如何响应消息、何时使用工具等）
+
+        Returns:
+            格式化的身份信息字符串，用于系统提示词开头
+        """
         from datetime import datetime
         now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
         workspace_path = str(self.workspace.expanduser().resolve())
@@ -121,7 +141,19 @@ Always be helpful, accurate, and concise. When using tools, explain what you're 
 When remembering something, write to {workspace_path}/memory/MEMORY.md"""
     
     def _load_bootstrap_files(self) -> str:
-        """Load all bootstrap files from workspace."""
+        """加载所有 Bootstrap 配置文件。
+
+        按 BOOTSTRAP_FILES 定义的顺序加载：
+        1. AGENTS.md - Agent 说明
+        2. SOUL.md - 机器人人格
+        3. USER.md - 用户信息
+        4. TOOLS.md - 工具说明
+        5. IDENTITY.md - 身份定义
+
+        Returns:
+            格式化的 Bootstrap 内容字符串，格式为 "## filename\\n\\ncontent"
+            如果所有文件都不存在，返回空字符串
+        """
         parts = []
         
         for filename in self.BOOTSTRAP_FILES:
@@ -139,35 +171,54 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
         skill_names: list[str] | None = None,
         media: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """
-        Build the complete message list for an LLM call.
+        """构建完整的消息列表，用于 LLM 调用。
+
+        消息结构：
+        1. System Message - 系统提示词
+        2. History Messages - 历史对话
+        3. User Message - 当前用户消息（含图片附件）
 
         Args:
-            history: Previous conversation messages.
-            current_message: The new user message.
-            skill_names: Optional skills to include.
-            media: Optional list of local file paths for images/media.
+            history: 历史对话消息列表，每条消息包含 role 和 content
+            current_message: 当前用户发送的消息内容
+            skill_names: 要激活的技能名称列表（可选）
+            media: 本地图片/媒体文件路径列表（可选）
 
         Returns:
-            List of messages including system prompt.
+            完整的消息列表，可直接传给 LLM 的 messages 参数
         """
         messages = []
 
-        # System prompt
+        # 1. 系统提示词
         system_prompt = self.build_system_prompt(skill_names)
         messages.append({"role": "system", "content": system_prompt})
 
-        # History
+        # 2. 对话历史
         messages.extend(history)
 
-        # Current message (with optional image attachments)
+        # 3. 当前消息（支持图片附件）
         user_content = self._build_user_content(current_message, media)
         messages.append({"role": "user", "content": user_content})
 
         return messages
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:
-        """Build user message content with optional base64-encoded images."""
+        """构建用户消息内容，支持 Base64 编码的图片附件。
+
+        图片处理流程：
+        1. 检查文件是否存在
+        2. 猜测 MIME 类型（只处理图片）
+        3. 读取文件并 Base64 编码
+        4. 构建 OpenAI 格式的图片对象
+
+        Args:
+            text: 文本消息内容
+            media: 本地图片文件路径列表
+
+        Returns:
+            如果无图片：返回原始文本
+            如果有图片：返回混合格式 [{图片对象}, {文本对象}]
+        """
         if not media:
             return text
         
@@ -175,8 +226,10 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
         for path in media:
             p = Path(path)
             mime, _ = mimetypes.guess_type(path)
+            # 只处理图片文件
             if not p.is_file() or not mime or not mime.startswith("image/"):
                 continue
+            # Base64 编码图片
             b64 = base64.b64encode(p.read_bytes()).decode()
             images.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
         
@@ -191,17 +244,19 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
         tool_name: str,
         result: str
     ) -> list[dict[str, Any]]:
-        """
-        Add a tool result to the message list.
-        
+        """将工具执行结果添加到消息列表。
+
+        在 ReAct 模式中，工具执行完成后需要将结果返回给 LLM。
+        使用 tool 角色标记，LLM 可以看到工具调用和结果。
+
         Args:
-            messages: Current message list.
-            tool_call_id: ID of the tool call.
-            tool_name: Name of the tool.
-            result: Tool execution result.
-        
+            messages: 当前消息列表
+            tool_call_id: 工具调用的 ID（来自 LLM 的 tool_calls[].id）
+            tool_name: 工具名称
+            result: 工具执行结果
+
         Returns:
-            Updated message list.
+            添加工具结果后的消息列表
         """
         messages.append({
             "role": "tool",
@@ -217,16 +272,17 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
         content: str | None,
         tool_calls: list[dict[str, Any]] | None = None
     ) -> list[dict[str, Any]]:
-        """
-        Add an assistant message to the message list.
-        
+        """将助手消息添加到消息列表。
+
+        用于记录 LLM 的响应（或工具调用决策）。
+
         Args:
-            messages: Current message list.
-            content: Message content.
-            tool_calls: Optional tool calls.
-        
+            messages: 当前消息列表
+            content: 助手消息内容（可为 None，如果只有工具调用）
+            tool_calls: 工具调用列表（可选，用于函数调用场景）
+
         Returns:
-            Updated message list.
+            添加助手消息后的消息列表
         """
         msg: dict[str, Any] = {"role": "assistant", "content": content or ""}
         
