@@ -1,6 +1,9 @@
-"""LLM provider abstraction module."""
+"""LLM 提供商抽象模块。
 
-from nanobot.providers.base import LLMProvider, LLMResponse
-from nanobot.providers.litellm_provider import LiteLLMProvider
+提供统一的 LLM 接口，支持多种模型提供商：
+- LLMProvider: 抽象基类，定义提供商接口
+- LLMResponse: LLM 响应数据结构
+- LiteLLMProvider: 基于 LiteLLM 的多提供商实现
 
-__all__ = ["LLMProvider", "LLMResponse", "LiteLLMProvider"]
+支持的提供商：OpenAI, Anthropic, Gemini, OpenRouter, vLLM, 智谱等
+"""

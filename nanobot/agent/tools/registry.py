@@ -1,19 +1,15 @@
-"""Tool registry for dynamic tool management."""
+"""工具注册中心模块。
 
-from typing import Any
+提供动态工具管理功能：
+- 注册/注销工具
+- 获取工具定义（OpenAI 格式）
+- 执行工具调用
 
-from nanobot.agent.tools.base import Tool
-
-
-class ToolRegistry:
-    """
-    Registry for agent tools.
-    
-    Allows dynamic registration and execution of tools.
-    """
-    
-    def __init__(self):
-        self._tools: dict[str, Tool] = {}
+工具以名称为键存储，支持：
+- 同步验证参数
+- 异步执行
+- 错误处理
+"""
     
     def register(self, tool: Tool) -> None:
         """Register a tool."""

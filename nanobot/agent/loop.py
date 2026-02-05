@@ -1,37 +1,15 @@
-"""Agent loop: the core processing engine."""
+"""Agent 循环模块：核心处理引擎。
 
-import asyncio
-import json
-from pathlib import Path
-from typing import Any
+代理的主循环，负责处理消息的完整生命周期：
+1. 从消息总线接收消息
+2. 构建上下文（历史、记忆、技能）
+3. 调用 LLM 生成响应
+4. 执行工具调用
+5. 发送响应回渠道
 
-from loguru import logger
-
-from nanobot.bus.events import InboundMessage, OutboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import LLMProvider
-from nanobot.agent.context import ContextBuilder
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.tools.filesystem import ReadFileTool, WriteFileTool, EditFileTool, ListDirTool
-from nanobot.agent.tools.shell import ExecTool
-from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
-from nanobot.agent.tools.message import MessageTool
-from nanobot.agent.tools.spawn import SpawnTool
-from nanobot.agent.subagent import SubagentManager
-from nanobot.session.manager import SessionManager
-
-
-class AgentLoop:
-    """
-    The agent loop is the core processing engine.
-    
-    It:
-    1. Receives messages from the bus
-    2. Builds context with history, memory, skills
-    3. Calls the LLM
-    4. Executes tool calls
-    5. Sends responses back
-    """
+核心流程：
+   入站消息 -> 构建上下文 -> LLM 调用 -> 工具执行 -> 出站消息
+"""
     
     def __init__(
         self,

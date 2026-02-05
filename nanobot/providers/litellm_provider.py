@@ -1,21 +1,18 @@
-"""LiteLLM provider implementation for multi-provider support."""
+"""LiteLLM 提供商实现模块。
 
-import os
-from typing import Any
+通过 LiteLLM 库实现多提供商支持，统一调用接口：
+- OpenRouter: 聚合多个模型的第三方平台
+- Anthropic: Claude 系列模型
+- OpenAI: GPT 系列模型
+- Gemini: Google 模型
+- vLLM: 本地部署的 vLLM 服务
+- 智谱 (Zhipu/Z.ai): 国产模型
 
-import litellm
-from litellm import acompletion
-
-from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
-
-
-class LiteLLMProvider(LLMProvider):
-    """
-    LLM provider using LiteLLM for multi-provider support.
-    
-    Supports OpenRouter, Anthropic, OpenAI, Gemini, and many other providers through
-    a unified interface.
-    """
+特性：
+- 自动检测提供商类型
+- 模型名称自动补全前缀
+- 统一的 Tool Call 支持
+"""
     
     def __init__(
         self, 

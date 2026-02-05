@@ -1,4 +1,13 @@
-"""Context builder for assembling agent prompts."""
+"""上下文构建器：组装代理提示词。
+
+此模块负责构建发送给 LLM 的完整上下文，包括：
+- 系统提示词（Bootstrap 文件、身份信息）
+- 记忆内容（长期记忆和短期记忆）
+- 技能信息（内置技能和自定义技能）
+- 对话历史
+
+通过渐进式加载策略，核心技能完整加载，普通技能只显示摘要。
+"""
 
 import base64
 import mimetypes
@@ -11,18 +20,29 @@ from nanobot.agent.skills import SkillsLoader
 
 class ContextBuilder:
     """
-    Builds the context (system prompt + messages) for the agent.
-    
-    Assembles bootstrap files, memory, skills, and conversation history
-    into a coherent prompt for the LLM.
+    上下文构建器。
+
+    负责组装发送给 LLM 的完整上下文，包含以下部分：
+    1. 核心身份信息 - 机器人的基本描述和当前时间
+    2. Bootstrap 文件 - AGENTS.md, SOUL.md, USER.md, TOOLS.md, IDENTITY.md
+    3. 记忆内容 - 从 memory/MEMORY.md 和最近几天的笔记中获取
+    4. 技能信息 - 渐进式加载，核心技能完整加载，其他技能只显示摘要
+
+    技能来源优先级：工作区 > 内置技能
     """
-    
+
+    # Bootstrap 文件名列表，按顺序加载
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md"]
-    
+
     def __init__(self, workspace: Path):
+        """初始化上下文构建器。
+
+        Args:
+            workspace: 工作区目录路径
+        """
         self.workspace = workspace
-        self.memory = MemoryStore(workspace)
-        self.skills = SkillsLoader(workspace)
+        self.memory = MemoryStore(workspace)  # 记忆存储
+        self.skills = SkillsLoader(workspace)  # 技能加载器
     
     def build_system_prompt(self, skill_names: list[str] | None = None) -> str:
         """
